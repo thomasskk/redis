@@ -18,7 +18,6 @@ const (
 type Value struct {
 	typ   string
 	str   string
-	num   int
 	bulk  string
 	array []Value
 }
@@ -34,7 +33,7 @@ func NewResp(rd io.Reader) *Resp {
 func (r *Resp) readArray(len int) (Value, error) {
 	v := Value{}
 	v.typ = "array"
-	v.array = make([]Value, len)
+	v.array = make([]Value, 0)
 
 	for i := 0; i < len; i++ {
 		val, err := r.Read()
@@ -48,9 +47,14 @@ func (r *Resp) readArray(len int) (Value, error) {
 	return v, nil
 }
 
-func (r *Resp) readLine() (line []byte, err error) {
-	r.scanner.Scan()
-	tok := r.scanner.Bytes()
+func (r *Resp) readLine() (line string, err error) {
+	isOver := r.scanner.Scan()
+
+	if !isOver {
+		return "", fmt.Errorf("EOF")
+	}
+
+	tok := r.scanner.Text()
 
 	return tok, nil
 }
@@ -64,21 +68,21 @@ func (r *Resp) readBulk() (Value, error) {
 		return v, err
 	}
 
-	v.bulk = string(line)
+	v.bulk = line
 
 	return v, nil
 }
 
-func (r *Resp) readMetadata() (typ byte, len int, err error) {
+func (r *Resp) readMetadata() (typ byte, length int, err error) {
 	line, err := r.readLine()
 
 	if err != nil {
 		return byte(0), 0, err
 	}
 
-	i64, err := strconv.ParseInt(string(line[1:]), 10, 64)
+	i64, err := strconv.ParseInt(line[1:], 10, 64)
 	if err != nil {
-		return typ, 0, err
+		return byte(0), 0, err
 	}
 
 	return line[0], int(i64), nil
@@ -95,7 +99,7 @@ func (r *Resp) Read() (Value, error) {
 	case ARRAY:
 		return r.readArray(len)
 	case BULK:
-		return r.readBulk(len)
+		return r.readBulk()
 	default:
 		fmt.Printf("Invalid type: %v", string(_type))
 		return Value{}, nil
